@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Spenza",
+    "slug": "spenza",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "spenza",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#0D0D14"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.spenza.app"
+    },
+    "android": {
+      "package": "com.spenza.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0D14"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
