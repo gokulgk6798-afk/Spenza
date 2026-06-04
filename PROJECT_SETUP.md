@@ -172,6 +172,16 @@ npm start
 
 Use `http://10.0.2.2:4000` instead of `http://localhost:4000` for Android emulator targets.
 
+## Expo build
+
+```bash
+cd frontend
+npm run typecheck
+npm run build:android
+```
+
+The Android build command uses EAS profile `preview`, which is configured in `frontend/eas.json` to produce an internal APK. Before the first build on a machine or Expo account, run `npx eas login` and `npx eas init` from `frontend/`.
+
 Local mock login:
 
 * Email: `mock@spenza.local`
