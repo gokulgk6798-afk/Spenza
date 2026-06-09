@@ -1,4 +1,16 @@
 {
+  "name": "spenza",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix frontend start",
+    "android": "npm --prefix frontend run android",
+    "ios": "npm --prefix frontend run ios",
+    "web": "npm --prefix frontend run web",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "build:android": "npm --prefix frontend run build:android",
+    "build:android:prod": "npm --prefix frontend run build:android:prod",
+    "build:ios": "npm --prefix frontend run build:ios"
+  },
   "dependencies": {
     "openai": "^6.34.0"
   }

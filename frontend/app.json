@@ -1,29 +1,35 @@
 {
-  "expo": {
-    "name": "Spenza",
-    "slug": "spenza",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "scheme": "spenza",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "backgroundColor": "#0D0D14"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.spenza.app"
-    },
-    "android": {
-      "package": "com.spenza.app",
-      "adaptiveIcon": {
-        "backgroundColor": "#0D0D14"
-      }
-    },
-    "web": {
-      "bundler": "metro"
-    }
-  }
+    "expo":  {
+                 "name":  "Spenza",
+                 "slug":  "spenza-g-rgnjhjm0ni790hadth6",
+                 "version":  "1.0.0",
+                 "orientation":  "portrait",
+                 "scheme":  "spenza",
+                 "userInterfaceStyle":  "light",
+                 "splash":  {
+                                "backgroundColor":  "#0D0D14"
+                            },
+                 "assetBundlePatterns":  [
+                                             "**/*"
+                                         ],
+                 "ios":  {
+                             "supportsTablet":  true,
+                             "bundleIdentifier":  "com.spenza.app"
+                         },
+                 "android":  {
+                                 "package":  "com.spenza.app",
+                                 "adaptiveIcon":  {
+                                                      "backgroundColor":  "#0D0D14"
+                                                  }
+                             },
+                 "web":  {
+                             "bundler":  "metro"
+                         },
+                 "extra":  {
+                               "eas":  {
+                                           "projectId":  "f57a55b5-f9fd-4188-be4f-4cf1e7e34ec4"
+                                       }
+                           },
+                 "owner":  "gokulgk67"
+             }
 }
