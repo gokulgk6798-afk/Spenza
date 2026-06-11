@@ -137,8 +137,12 @@ export async function createTransaction(
         category: parsed.category,
         vendor: parsed.vendor,
         timestamp: parsed.timestamp,
-        rawText: parsed.originalText,
-        source: "chat"
+        rawText: parsed.source === "sms" ? "" : parsed.originalText,
+        source: parsed.source ?? "chat",
+        sourceReferenceHash: parsed.sourceReferenceHash,
+        paymentMethod: parsed.paymentMethod,
+        confidence: parsed.confidence,
+        sourceMetadata: parsed.bankDetails
       })
     },
     token

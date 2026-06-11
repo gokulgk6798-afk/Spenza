@@ -43,10 +43,13 @@ const categoryOptions = [
   { label: "Groceries", value: "groceries", icon: "cart-outline" },
   { label: "Medical", value: "medical", icon: "medkit-outline" },
   { label: "Salary", value: "salary", icon: "cash-outline" },
+  { label: "Bills", value: "bills", icon: "receipt-outline" },
+  { label: "Refund", value: "refund", icon: "refresh-outline" },
+  { label: "Income", value: "income", icon: "trending-up-outline" },
   { label: "Others", value: "other", icon: "apps-outline" }
 ] as const;
 
-const paymentMethods = ["Cash", "UPI", "Card"];
+const paymentMethods = ["Cash", "UPI", "Card", "Bank", "ATM", "Auto debit"];
 const dateOptions = [
   { label: "Today", offset: 0 },
   { label: "Yesterday", offset: -1 },
@@ -70,9 +73,14 @@ export function ChatScreen({ onClose }: ChatScreenProps) {
   const {
     chatMessages,
     pendingParse,
+    pendingSmsSuggestions,
     isSending,
     isSaving,
+    isScanningSms,
     sendMessage,
+    scanSmsMessages,
+    editSmsSuggestion,
+    ignoreSmsSuggestion,
     updatePendingParse,
     confirmPending
   } = useApp();
@@ -98,6 +106,14 @@ export function ChatScreen({ onClose }: ChatScreenProps) {
   function editPending() {
     if (!pendingParse) return;
     setEditForm(buildEditForm(pendingParse));
+    setEditVisible(true);
+  }
+
+  function editSms(index: number) {
+    const suggestion = pendingSmsSuggestions[index];
+    if (!suggestion) return;
+    editSmsSuggestion(index);
+    setEditForm(buildEditForm(suggestion));
     setEditVisible(true);
   }
 
@@ -148,6 +164,22 @@ export function ChatScreen({ onClose }: ChatScreenProps) {
         showsVerticalScrollIndicator={false}
       />
 
+      {pendingSmsSuggestions.length ? (
+        <View style={styles.smsPanel}>
+          <Text style={styles.smsPanelTitle}>Detected today</Text>
+          {pendingSmsSuggestions.map((suggestion, index) => (
+            <SmsSuggestionCard
+              disabled={isSaving}
+              key={suggestion.sourceReferenceHash ?? `${suggestion.amount}-${index}`}
+              onConfirm={() => void confirmPending(suggestion, index)}
+              onEdit={() => editSms(index)}
+              onIgnore={() => ignoreSmsSuggestion(index)}
+              suggestion={suggestion}
+            />
+          ))}
+        </View>
+      ) : null}
+
       {pendingParse ? (
         <View style={styles.confirmBubble}>
           <Text style={styles.confirmText}>
@@ -172,6 +204,13 @@ export function ChatScreen({ onClose }: ChatScreenProps) {
         <View style={styles.followUp}>
           <Text style={styles.followUpText}>Anything else to add?</Text>
           <View style={styles.followUpActions}>
+            <Pressable
+              disabled={isScanningSms}
+              onPress={() => void scanSmsMessages()}
+              style={[styles.secondaryChip, isScanningSms && styles.disabledChip]}
+            >
+              <Text style={styles.secondaryChipText}>{isScanningSms ? "Scanning..." : "Scan SMS"}</Text>
+            </Pressable>
             <Pressable onPress={() => inputRef.current?.focus()} style={styles.secondaryChip}>
               <Text style={styles.secondaryChipText}>+ Add more</Text>
             </Pressable>
@@ -235,6 +274,46 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       <Text style={[styles.bubbleText, fromUser ? styles.userText : styles.assistantText]}>
         {message.text}
       </Text>
+    </View>
+  );
+}
+
+function SmsSuggestionCard({
+  disabled,
+  onConfirm,
+  onEdit,
+  onIgnore,
+  suggestion
+}: {
+  disabled: boolean;
+  onConfirm: () => void;
+  onEdit: () => void;
+  onIgnore: () => void;
+  suggestion: ParseResult;
+}) {
+  return (
+    <View style={styles.smsCard}>
+      <View style={styles.smsCardHeader}>
+        <Text style={styles.smsAmount}>
+          {suggestion.type === "income" ? "+" : "-"}Rs {suggestion.amount.toFixed(0)}
+        </Text>
+        <Text style={styles.smsType}>{suggestion.type === "income" ? "Income" : "Expense"}</Text>
+      </View>
+      <Text numberOfLines={1} style={styles.smsMeta}>
+        {suggestion.vendor || suggestion.paymentMethod || "Bank transaction"}
+      </Text>
+      <Text style={styles.smsCategory}>Suggested: {titleCase(normalizeCategory(suggestion.category))}</Text>
+      <View style={styles.smsActions}>
+        <Pressable disabled={disabled} onPress={onConfirm} style={styles.saveChip}>
+          <Text style={styles.saveChipText}>{disabled ? "Saving..." : "Confirm"}</Text>
+        </Pressable>
+        <Pressable onPress={onEdit} style={styles.editChip}>
+          <Text style={styles.editChipText}>Edit</Text>
+        </Pressable>
+        <Pressable onPress={onIgnore} style={styles.ignoreChip}>
+          <Text style={styles.ignoreChipText}>Ignore</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -585,6 +664,58 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 16
   },
+  smsPanel: {
+    backgroundColor: theme.surface,
+    borderColor: theme.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    marginBottom: 16,
+    marginHorizontal: 24,
+    padding: 14
+  },
+  smsPanelTitle: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: "900"
+  },
+  smsCard: {
+    backgroundColor: theme.surfaceSoft,
+    borderRadius: 14,
+    gap: 6,
+    padding: 12
+  },
+  smsCardHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  smsAmount: {
+    color: theme.text,
+    fontSize: 18,
+    fontWeight: "900"
+  },
+  smsType: {
+    color: theme.success,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  smsMeta: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  smsCategory: {
+    color: theme.muted,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  smsActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingTop: 4
+  },
   saveChip: {
     backgroundColor: theme.brand,
     borderRadius: 17,
@@ -608,6 +739,21 @@ const styles = StyleSheet.create({
     color: theme.text,
     fontSize: 13,
     fontWeight: "900"
+  },
+  ignoreChip: {
+    backgroundColor: theme.field,
+    borderRadius: 17,
+    height: 33,
+    justifyContent: "center",
+    paddingHorizontal: 16
+  },
+  ignoreChipText: {
+    color: theme.muted,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  disabledChip: {
+    opacity: 0.55
   },
   pressed: {
     opacity: 0.8

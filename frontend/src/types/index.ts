@@ -73,6 +73,17 @@ export type ParseResult = {
   originalText: string;
   timestamp?: string;
   paymentMethod?: string;
+  source?: string;
+  sourceReferenceHash?: string;
+  bankDetails?: {
+    bank_name: string;
+    transaction_type: "DEBIT" | "CREDIT";
+    amount: number;
+    account_last_4_digits: string;
+    payee_or_sender_vpa: string;
+    upi_ref_no: string | null;
+    available_balance: string | null;
+  };
 };
 
 export type SafetySummary = {

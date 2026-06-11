@@ -46,6 +46,24 @@ const transactionSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    sourceReferenceHash: {
+      type: String,
+      default: "",
+      index: true,
+    },
+    paymentMethod: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    confidence: {
+      type: Number,
+      default: 0,
+    },
+    sourceMetadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
     mergeCount: {
       type: Number,
       default: 1,
@@ -57,6 +75,9 @@ const transactionSchema = new mongoose.Schema(
 );
 
 transactionSchema.index({ userId: 1, timestamp: -1 });
+transactionSchema.index(
+  { userId: 1, sourceReferenceHash: 1 },
+  { unique: true, partialFilterExpression: { sourceReferenceHash: { $type: "string", $gt: "" } } }
+);
 
 module.exports = mongoose.model("Transaction", transactionSchema);
-

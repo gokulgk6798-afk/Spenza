@@ -1,6 +1,7 @@
 const Transaction = require("../models/Transaction");
 const HttpError = require("../utils/httpError");
 const { findDuplicate } = require("../utils/deduplication");
+const { parseSmsBatch } = require("../utils/smsTransactionParser");
 const { parseTransactionText } = require("../utils/transactionParser");
 
 function normalizePayload(payload = {}) {
@@ -12,6 +13,10 @@ function normalizePayload(payload = {}) {
     timestamp: payload.timestamp ? new Date(payload.timestamp) : new Date(),
     source: payload.source || "chat",
     rawText: payload.rawText || payload.text || "",
+    sourceReferenceHash: payload.sourceReferenceHash || "",
+    paymentMethod: payload.paymentMethod || "",
+    confidence: Number(payload.confidence || 0),
+    sourceMetadata: payload.sourceMetadata || payload.bankDetails || {},
   };
 }
 
@@ -40,6 +45,20 @@ async function createTransaction(userId, payload) {
 
   validateTransaction(normalized);
 
+  if (normalized.sourceReferenceHash) {
+    const existingByReference = await Transaction.findOne({
+      userId,
+      sourceReferenceHash: normalized.sourceReferenceHash,
+    });
+
+    if (existingByReference) {
+      return {
+        transaction: existingByReference,
+        duplicateMerged: true,
+      };
+    }
+  }
+
   const duplicateWindowStart = new Date(normalized.timestamp.getTime() - 5 * 60 * 1000);
   const duplicateWindowEnd = new Date(normalized.timestamp.getTime() + 5 * 60 * 1000);
 
@@ -60,6 +79,12 @@ async function createTransaction(userId, payload) {
       duplicate.category = normalized.category;
     }
     duplicate.rawText = duplicate.rawText || normalized.rawText;
+    duplicate.sourceReferenceHash = duplicate.sourceReferenceHash || normalized.sourceReferenceHash;
+    duplicate.paymentMethod = duplicate.paymentMethod || normalized.paymentMethod;
+    duplicate.confidence = Math.max(duplicate.confidence || 0, normalized.confidence || 0);
+    duplicate.sourceMetadata = Object.keys(duplicate.sourceMetadata || {}).length
+      ? duplicate.sourceMetadata
+      : normalized.sourceMetadata;
     duplicate.sources = Array.from(new Set([...(duplicate.sources || [duplicate.source]), normalized.source]));
     duplicate.mergeCount += 1;
     await duplicate.save();
@@ -108,8 +133,17 @@ async function getTransactions(userId, filters = {}) {
   return Transaction.find(query).sort({ timestamp: -1, createdAt: -1 });
 }
 
+async function detectSmsTransactions(messages = []) {
+  if (!Array.isArray(messages)) {
+    throw new HttpError(400, "messages must be an array.");
+  }
+
+  return parseSmsBatch(messages);
+}
+
 module.exports = {
   parseInput,
   createTransaction,
+  detectSmsTransactions,
   getTransactions,
 };

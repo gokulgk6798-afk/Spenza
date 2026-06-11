@@ -39,6 +39,13 @@ module.exports = ({ config = {}, projectRoot = __dirname } = {}) => {
     android: {
       ...config.android,
       package: process.env.ANDROID_PACKAGE || BUNDLE_ID,
+      permissions: [
+        ...new Set([
+          ...(config.android?.permissions || []),
+          'READ_SMS',
+          'RECEIVE_SMS',
+        ]),
+      ],
       versionCode: Number(process.env.ANDROID_VERSION_CODE || 1),
       adaptiveIcon: {
         ...config.android?.adaptiveIcon,
@@ -49,6 +56,10 @@ module.exports = ({ config = {}, projectRoot = __dirname } = {}) => {
       ...config.web,
       bundler: 'metro',
     },
+    plugins: [
+      ...(config.plugins || []),
+      './frontend/plugins/withSpenzaSmsReader',
+    ],
     extra: {
       ...config.extra,
       ...Object.fromEntries(

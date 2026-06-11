@@ -4,8 +4,8 @@ const transactionsController = require("../controllers/transactions.controller")
 const router = express.Router();
 
 router.post("/parse", transactionsController.parseTransaction);
+router.post("/sms/detect", transactionsController.detectSmsTransactions);
 router.post("/", transactionsController.createTransaction);
 router.get("/", transactionsController.getTransactions);
 
 module.exports = router;
-

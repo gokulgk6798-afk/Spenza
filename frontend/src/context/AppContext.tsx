@@ -9,6 +9,7 @@ import {
 
 import * as api from "../api/client";
 import { signInWithGoogle } from "../api/googleAuth";
+import { parseSmsMessage, scanSmsForTransactions } from "../services/smsDetection";
 import {
   AppUser,
   BudgetItem,
@@ -39,8 +40,10 @@ type AppContextValue = {
   linkedAccounts: AsyncState<{ linkedAccounts: LinkedAccount[]; paymentMethods: PaymentMethod[] }>;
   chatMessages: ChatMessage[];
   pendingParse?: ParseResult;
+  pendingSmsSuggestions: ParseResult[];
   isSending: boolean;
   isSaving: boolean;
+  isScanningSms: boolean;
   loginWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => void;
@@ -64,8 +67,11 @@ type AppContextValue = {
   addBudget: () => Promise<void>;
   saveBudgetLimit: (budgetId: string, limit: number) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
+  scanSmsMessages: () => Promise<void>;
+  editSmsSuggestion: (index: number) => void;
+  ignoreSmsSuggestion: (index: number) => void;
   updatePendingParse: (nextParse: ParseResult) => void;
-  confirmPending: () => Promise<void>;
+  confirmPending: (overrideParse?: ParseResult, smsSuggestionIndex?: number) => Promise<void>;
 };
 
 const mockUser: AppUser = {
@@ -206,8 +212,11 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   ]);
   const [pendingParse, setPendingParse] = useState<ParseResult>();
+  const [pendingSmsSuggestions, setPendingSmsSuggestions] = useState<ParseResult[]>([]);
+  const [activeSmsSuggestionIndex, setActiveSmsSuggestionIndex] = useState<number>();
   const [isSending, setIsSending] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isScanningSms, setIsScanningSms] = useState(false);
   const token = user?.token;
 
   const loginWithEmail = useCallback(async (email: string, password: string) => {
@@ -246,6 +255,8 @@ export function AppProvider({ children }: PropsWithChildren) {
   const logout = useCallback(() => {
     setUser(undefined);
     setPendingParse(undefined);
+    setPendingSmsSuggestions([]);
+    setActiveSmsSuggestionIndex(undefined);
     setProfile({ loading: false });
     setBudgets({ loading: false });
     setLinkedAccounts({ loading: false });
@@ -586,28 +597,94 @@ export function AppProvider({ children }: PropsWithChildren) {
     setPendingParse(nextParse);
   }, []);
 
-  const confirmPending = useCallback(async () => {
-    if (!token || !pendingParse) return;
+  const scanSmsMessages = useCallback(async () => {
+    if (!token) return;
+    setIsScanningSms(true);
+
+    try {
+      const result =
+        token === mockUser.token
+          ? {
+              available: true as const,
+              suggestions: mockSmsMessages.map(parseSmsMessage).filter(Boolean) as ParseResult[]
+            }
+          : await scanSmsForTransactions();
+
+      if (!result.available) {
+        setChatMessages((current) => [
+          ...current,
+          {
+            id: `${Date.now()}-sms-unavailable`,
+            role: "assistant",
+            text: result.reason
+          }
+        ]);
+        return;
+      }
+
+      setPendingSmsSuggestions((current) => dedupeSmsSuggestions([...current, ...result.suggestions]));
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-sms-detected`,
+          role: "assistant",
+          text: result.suggestions.length
+            ? `These are the transactions detected today. Please confirm the category for each transaction.`
+            : "No transaction SMS messages were detected today."
+        }
+      ]);
+    } catch (error) {
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-sms-error`,
+          role: "assistant",
+          text: `SMS scan failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        }
+      ]);
+    } finally {
+      setIsScanningSms(false);
+    }
+  }, [token]);
+
+  const editSmsSuggestion = useCallback((index: number) => {
+    setActiveSmsSuggestionIndex(index);
+    setPendingParse(pendingSmsSuggestions[index]);
+  }, [pendingSmsSuggestions]);
+
+  const ignoreSmsSuggestion = useCallback((index: number) => {
+    setPendingSmsSuggestions((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    setActiveSmsSuggestionIndex((current) => (current === index ? undefined : current));
+  }, []);
+
+  const confirmPending = useCallback(async (overrideParse?: ParseResult, smsSuggestionIndex?: number) => {
+    const parseToSave = overrideParse ?? pendingParse;
+    if (!token || !parseToSave) return;
     setIsSaving(true);
     try {
       const transaction =
         token === mockUser.token
           ? {
               id: `${Date.now()}-mock`,
-              amount: pendingParse.amount,
-              type: pendingParse.type,
-              category: pendingParse.category,
-              vendor: pendingParse.vendor,
-              timestamp: pendingParse.timestamp ?? new Date().toISOString(),
-              source: "chat",
+              amount: parseToSave.amount,
+              type: parseToSave.type,
+              category: parseToSave.category,
+              vendor: parseToSave.vendor,
+              timestamp: parseToSave.timestamp ?? new Date().toISOString(),
+              source: parseToSave.source ?? "chat",
               mergeCount: 1
             }
-          : await api.createTransaction(token, pendingParse);
+          : await api.createTransaction(token, parseToSave);
       setTransactions((current) => ({
         data: [transaction, ...(current.data ?? [])],
         loading: false
       }));
       setPendingParse(undefined);
+      const indexToRemove = smsSuggestionIndex ?? activeSmsSuggestionIndex;
+      if (indexToRemove !== undefined) {
+        setPendingSmsSuggestions((current) => current.filter((_, index) => index !== indexToRemove));
+        setActiveSmsSuggestionIndex(undefined);
+      }
       setChatMessages((current) => [
         ...current,
         {
@@ -622,7 +699,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     } finally {
       setIsSaving(false);
     }
-  }, [loadDashboard, loadInsights, pendingParse, token]);
+  }, [activeSmsSuggestionIndex, loadDashboard, loadInsights, pendingParse, token]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -635,8 +712,10 @@ export function AppProvider({ children }: PropsWithChildren) {
       linkedAccounts,
       chatMessages,
       pendingParse,
+      pendingSmsSuggestions,
       isSending,
       isSaving,
+      isScanningSms,
       loginWithEmail,
       loginWithGoogle,
       logout,
@@ -654,6 +733,9 @@ export function AppProvider({ children }: PropsWithChildren) {
       addBudget,
       saveBudgetLimit,
       sendMessage,
+      scanSmsMessages,
+      editSmsSuggestion,
+      ignoreSmsSuggestion,
       updatePendingParse,
       confirmPending
     }),
@@ -667,8 +749,10 @@ export function AppProvider({ children }: PropsWithChildren) {
       linkedAccounts,
       chatMessages,
       pendingParse,
+      pendingSmsSuggestions,
       isSending,
       isSaving,
+      isScanningSms,
       loginWithEmail,
       loginWithGoogle,
       logout,
@@ -686,12 +770,38 @@ export function AppProvider({ children }: PropsWithChildren) {
       addBudget,
       saveBudgetLimit,
       sendMessage,
+      scanSmsMessages,
+      editSmsSuggestion,
+      ignoreSmsSuggestion,
       updatePendingParse,
       confirmPending
     ]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+const mockSmsMessages = [
+  {
+    sender: "HDFCBK",
+    timestamp: Date.now() - 60 * 60 * 1000,
+    body: "Rs.450.00 debited from A/C XX4521 via UPI to SWIGGY on 11-06-26. UTR 612345678901."
+  },
+  {
+    sender: "ICICIB",
+    timestamp: Date.now() - 2 * 60 * 60 * 1000,
+    body: "INR 1250 credited to your account from RAZORPAY REF 712345678901."
+  }
+];
+
+function dedupeSmsSuggestions(items: ParseResult[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.sourceReferenceHash || `${item.amount}-${item.type}-${item.timestamp}-${item.vendor}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function parseMockTransaction(text: string): ParseResult {
